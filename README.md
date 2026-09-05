@@ -61,7 +61,6 @@ restaurant-rating-predictor/
 ├── app.py
 ├── Dataset.csv
 ├── requirements.txt
-├── Readme.md
 └── restaurant_predict.ipynb
 ```
 
