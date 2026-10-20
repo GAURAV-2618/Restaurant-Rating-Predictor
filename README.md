@@ -1,164 +1,108 @@
-# Restaurant Rating Predictor
+# Restaurant Rating Predictor 🍽️
 
-This is a simple Machine Learning project that predicts the rating of a restaurant from **0 to 5**.
+## Overview
 
-The project is made using **Python, Machine Learning, and Streamlit**.
+The Restaurant Rating Predictor is a machine learning project that predicts restaurant ratings based on restaurant-related features. It provides a Streamlit web interface where users can enter restaurant details and view predicted ratings.
 
-## What This Project Does
+## Features
 
-The app takes some restaurant information and predicts its rating.
+- Predict restaurant ratings using machine learning.
+- Preprocess restaurant data for model training.
+- Compare multiple regression models.
+- Evaluate model performance using MAE, RMSE, and R².
+- Use a saved model artifact for predictions.
+- Explore the dataset and model evaluation in a Jupyter Notebook.
 
-You can enter:
+## Tech Stack
 
-* Average cost for two people
-* Price range
-* Number of votes
-* Country
-* City
-* Cuisines
-* Table booking
-* Online delivery
+- **Language:** Python
+- **Web application:** Streamlit
+- **Data processing:** Pandas, NumPy
+- **Machine learning:** Scikit-learn, XGBoost
+- **Visualization:** Matplotlib, Seaborn
+- **Model persistence:** Joblib
+- **Notebook:** Jupyter
 
-The app then gives a predicted restaurant rating.
-
-## Main Sections
-
-The Streamlit app has 4 sections:
-
-### 1. Prediction
-
-Enter restaurant details and get the predicted rating.
-
-### 2. Model Comparison
-
-Compare the three Machine Learning models used in the project.
-
-### 3. Dataset Overview
-
-View the dataset and basic information about it.
-
-### 4. Exploratory Analysis
-
-View different graphs and charts from the dataset.
-
-## Machine Learning Models
-
-Three models are used:
-
-* Linear Regression
-* Decision Tree
-* Random Forest
-
-The models are trained using an **80/20 train-test split**.
-
-The model with the best R² score is selected as the best model.
-
-## Project Files
+## Project Structure
 
 ```text
-restaurant-rating-predictor/
-│
+Restaurant-Rating-Predictor/
 ├── app.py
+├── model_utils.py
+├── restaurant_predict.ipynb
 ├── Dataset.csv
 ├── requirements.txt
-└── restaurant_predict.ipynb
+└── model_artifacts/
+    └── restaurant_model.joblib
 ```
 
-### File Description
+## Requirements
 
-* `app.py` - Main Streamlit application
-* `Dataset.csv` - Restaurant dataset
-* `requirements.txt` - Required Python libraries
-* `Readme.md` - Project information
-* `restaurant_predict.ipynb` - Jupyter Notebook
+- Python 3.10 or 3.11 recommended
+- pip
+- The project files and trained model artifact
 
-## How to Install
+## Installation
 
-First, create a virtual environment:
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/GAURAV-2618/Restaurant-Rating-Predictor.git
+   ```
+
+2. Enter the project directory:
+
+   ```bash
+   cd Restaurant-Rating-Predictor
+   ```
+
+3. Create a virtual environment:
+
+   ```bash
+   python -m venv .venv
+   ```
+
+4. Activate it on Windows PowerShell:
+
+   ```powershell
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+5. Install dependencies:
+
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+
+## Run the Application
+
+Start the Streamlit application:
 
 ```bash
-python -m venv .venv
+python -m streamlit run app.py
 ```
 
-Activate it on Windows:
+Open the local URL shown in the terminal, usually:
 
-```bash
-.venv\Scripts\activate
-```
-
-Then install the required libraries:
-
-```bash
-pip install -r requirements.txt
-```
-
-## How to Run
-
-Make sure `Dataset.csv` and `app.py` are in the same folder.
-
-Run:
-
-```bash
-streamlit run app.py
-```
-
-The app will open in your browser.
-
-If it does not open automatically, go to:
-
-```text
-http://localhost:8501
-```
-
-## Dataset
-
-The dataset contains information about restaurants, such as:
-
-* Restaurant name
-* Country
-* City
-* Cuisines
-* Average cost
-* Price range
-* Table booking
-* Online delivery
-* Votes
-* Restaurant rating
-
-The **Aggregate rating** column is used as the value that the model predicts.
-
-## Data Cleaning
-
-Before using the data:
-
-* Restaurants with a rating of 0 are removed.
-* Missing cuisine values are replaced with `Unknown`.
-* Yes/No values are changed to numbers.
-* The number of cuisines is calculated.
-* City and country values are converted into numbers.
+`http://localhost:8501`
 
 ## Model Evaluation
 
-The models are compared using:
+The project compares regression models using cross-validation and holdout evaluation. Metrics include:
 
-* **MAE** - Shows the average error.
-* **RMSE** - Shows the prediction error and gives more importance to large errors.
-* **R² Score** - Shows how well the model predicts the rating.
+- **MAE:** Mean Absolute Error
+- **RMSE:** Root Mean Squared Error
+- **R²:** Coefficient of determination
 
-For MAE and RMSE, a **lower value is better**.
+The selected model and evaluation results are determined by the project's training workflow.
 
-For R², a **higher value is better**.
+## Jupyter Notebook
 
-## Technologies Used
+Open `restaurant_predict.ipynb` in VS Code or Jupyter Notebook to explore the dataset, preprocessing, model training, and evaluation.
 
-* Python
-* Pandas
-* NumPy
-* Scikit-learn
-* Matplotlib
-* Seaborn
-* Streamlit
+## Notes
 
-## Goal of the Project
+- Keep `model_artifacts/restaurant_model.joblib` in the expected location so the application can load the trained model.
+- Ensure `Dataset.csv` is available at the path expected by the application.
+- Do not commit virtual environments, private credentials, or API keys.
 
-The main goal of this project is to use Machine Learning to **predict restaurant ratings** based on restaurant information.
