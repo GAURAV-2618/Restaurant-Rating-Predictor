@@ -1,14 +1,22 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+from pathlib import Path
 
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import streamlit as st
+
+from model_utils import (
+    CATEGORICAL_FEATURES,
+    FEATURE_COLS,
+    NUMERIC_FEATURES,
+    REQUIRED_COLUMNS,
+    TARGET_COL,
+    load_model_artifact,
+    preprocess_data,
+    validate_columns,
+)
+
 
 st.set_page_config(
     page_title="Restaurant Rating Predictor",
@@ -18,16 +26,9 @@ st.set_page_config(
 
 sns.set_style("whitegrid")
 
-FEATURE_COLS = [
-    "Average Cost for two",
-    "Price range",
-    "Votes",
-    "Table Booking Binary",
-    "Online Delivery Binary",
-    "Number of Cuisines",
-    "City Encoded",
-    "Country Code Encoded",
-]
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "Dataset.csv"
+ARTIFACT_PATH = BASE_DIR / "model_artifacts" / "restaurant_model.joblib"
 
 COUNTRY_NAMES = {
     1: "India", 14: "Australia", 30: "Brazil", 37: "Canada",
@@ -37,29 +38,6 @@ COUNTRY_NAMES = {
     215: "United Kingdom", 216: "United States",
 }
 
-REQUIRED_COLUMNS = [
-    "Restaurant ID",
-    "Restaurant Name",
-    "Country Code",
-    "City",
-    "Address",
-    "Locality",
-    "Locality Verbose",
-    "Longitude",
-    "Latitude",
-    "Cuisines",
-    "Average Cost for two",
-    "Currency",
-    "Has Table booking",
-    "Has Online delivery",
-    "Is delivering now",
-    "Switch to order menu",
-    "Price range",
-    "Aggregate rating",
-    "Rating color",
-    "Rating text",
-    "Votes",
-]
 
 st.markdown(
     """
@@ -138,48 +116,9 @@ st.markdown(
 
 @st.cache_data
 def load_data():
-    data = pd.read_csv("Dataset.csv")
-
-    missing_columns = [col for col in REQUIRED_COLUMNS if col not in data.columns]
-    if missing_columns:
-        raise ValueError(
-            "The dataset is missing required columns: "
-            + ", ".join(missing_columns)
-        )
-
+    data = pd.read_csv(DATA_PATH)
+    validate_columns(data, REQUIRED_COLUMNS)
     return data
-
-
-@st.cache_data
-def preprocess_data(raw_df):
-    df = raw_df.copy()
-
-    df["Cuisines"] = df["Cuisines"].fillna("Unknown")
-
-    df = df[df["Aggregate rating"] > 0].copy()
-
-    df["Restaurant Name Length"] = df["Restaurant Name"].apply(len)
-    df["Address Length"] = df["Address"].apply(len)
-
-    df["Table Booking Binary"] = (
-        df["Has Table booking"] == "Yes"
-    ).astype(int)
-
-    df["Online Delivery Binary"] = (
-        df["Has Online delivery"] == "Yes"
-    ).astype(int)
-
-    df["Number of Cuisines"] = df["Cuisines"].apply(
-        lambda x: len(str(x).split(", "))
-    )
-
-    city_freq_map = df["City"].value_counts().to_dict()
-    df["City Encoded"] = df["City"].map(city_freq_map)
-
-    country_freq_map = df["Country Code"].value_counts().to_dict()
-    df["Country Code Encoded"] = df["Country Code"].map(country_freq_map)
-
-    return df, city_freq_map, country_freq_map
 
 
 @st.cache_data
@@ -188,62 +127,6 @@ def get_unique_cuisines(df, country_code=None):
     exploded = subset["Cuisines"].dropna().str.split(", ").explode().str.strip()
     return sorted(exploded[exploded != ""].unique().tolist())
 
-@st.cache_resource
-def train_models(df):
-    X = df[FEATURE_COLS]
-    y = df["Aggregate rating"]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42,
-    )
-
-    models = {
-        "Linear Regression": LinearRegression(),
-        "Decision Tree": DecisionTreeRegressor(random_state=42),
-        "Random Forest": RandomForestRegressor(random_state=42),
-    }
-
-    results = []
-
-    for name, model in models.items():
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-
-        mae = mean_absolute_error(y_test, preds)
-        rmse = np.sqrt(mean_squared_error(y_test, preds))
-        r2 = r2_score(y_test, preds)
-
-        results.append(
-            {
-                "Model": name,
-                "MAE": mae,
-                "RMSE": rmse,
-                "R2": r2,
-            }
-        )
-
-    results_df = (
-        pd.DataFrame(results)
-        .sort_values(by="R2", ascending=False)
-        .reset_index(drop=True)
-    )
-
-    best_model_name = results_df.iloc[0]["Model"]
-    best_model = models[best_model_name]
-
-    return (
-        models,
-        results_df,
-        best_model_name,
-        best_model,
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-    )
 
 st.markdown(
     '<div class="main-title">Restaurant Rating Predictor</div>',
@@ -251,7 +134,7 @@ st.markdown(
 )
 st.markdown(
     '<div class="subtitle">'
-    "Interactive Streamlit version of the restaurant prediction notebook"
+    "Predict restaurant ratings with machine learning and explore the data"
     "</div>",
     unsafe_allow_html=True,
 )
@@ -271,51 +154,51 @@ with st.sidebar:
 
 try:
     raw_df = load_data()
-    df, city_freq_map, country_freq_map = preprocess_data(raw_df)
-
-    (
-        models,
-        results_df,
-        best_model_name,
-        best_model,
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-    ) = train_models(df)
-
-except FileNotFoundError:
-    st.error(
-        "Dataset.csv was not found. Place Dataset.csv in the same folder as app.py."
-    )
+    df = preprocess_data(raw_df)
+    artifact = load_model_artifact(ARTIFACT_PATH)
+    models = artifact["models"]
+    cv_results = artifact["cv_results"]
+    test_results = artifact["test_results"]
+    best_model_name = artifact["best_model_name"]
+    best_model = models[best_model_name]
+    city_coordinates = artifact["city_coordinates"]
+except FileNotFoundError as exc:
+    if Path(exc.filename or "").resolve() == DATA_PATH.resolve():
+        st.error("Dataset.csv was not found. Place it beside app.py.")
+    else:
+        st.error(
+            "The trained model artifact was not found. Run the final training/export "
+            "cell in restaurant_predict.ipynb to create "
+            "model_artifacts/restaurant_model.joblib, then restart the app."
+        )
     st.stop()
-
 except ValueError as exc:
     st.error(str(exc))
     st.stop()
+
 
 if page == "Prediction":
     st.header("Predict Restaurant Rating")
 
     st.info(
-        f"Best model from the notebook workflow: **{best_model_name}** "
-        f"(highest test-set R²)."
+        f"Best model by cross-validation (lowest mean MAE): **{best_model_name}**."
     )
 
     col1, col2 = st.columns(2)
 
     with col1:
         average_cost = st.number_input(
-            "Average Cost for two",
-            min_value=0.0,
+            "Average Cost for two (local currency)",
+            min_value=1.0,
             value=float(df["Average Cost for two"].median()),
             step=10.0,
+            help="Enter the cost in the currency used in the selected country.",
         )
 
         price_range = st.selectbox(
             "Price range",
             sorted(df["Price range"].dropna().unique().tolist()),
-            index=1 if len(df["Price range"].unique()) > 1 else 0,
+            index=1 if df["Price range"].nunique() > 1 else 0,
         )
 
         votes = st.number_input(
@@ -346,18 +229,26 @@ if page == "Prediction":
         )
 
         cuisine_options = get_unique_cuisines(df, country_code=country_code)
-        default_cuisine = ["North Indian"] if "North Indian" in cuisine_options else cuisine_options[:1]
+        default_cuisine = (
+            ["North Indian"]
+            if "North Indian" in cuisine_options
+            else cuisine_options[:1]
+        )
         selected_cuisines = st.multiselect(
             "Cuisines",
             cuisine_options,
             default=default_cuisine,
-            help="Only cuisines actually served in the selected country are shown.",
+            help="Only cuisines served in the selected country are shown.",
         )
 
         city_options = sorted(
             df.loc[df["Country Code"] == country_code, "City"].dropna().unique().tolist()
         )
-        city = st.selectbox("City", city_options)
+        city = st.selectbox(
+            "City",
+            city_options,
+            help="The model also uses the location, taken as the median coordinates of this city.",
+        )
 
     model_name = st.selectbox(
         "Prediction model",
@@ -366,30 +257,40 @@ if page == "Prediction":
     )
 
     number_of_cuisines = len(selected_cuisines)
+    coordinate_key = (country_code, city)
+    try:
+        latitude = float(city_coordinates.loc[coordinate_key, "Latitude"])
+        longitude = float(city_coordinates.loc[coordinate_key, "Longitude"])
+    except KeyError:
+        st.error("Coordinates are unavailable for this country and city. Retrain the model artifact.")
+        st.stop()
 
+    # One row with exactly the columns and types the pipelines were trained on.
     input_data = pd.DataFrame(
         [
             {
                 "Average Cost for two": average_cost,
                 "Price range": price_range,
                 "Votes": votes,
-                "Table Booking Binary": int(table_booking == "Yes"),
-                "Online Delivery Binary": int(online_delivery == "Yes"),
+                "Latitude": latitude,
+                "Longitude": longitude,
                 "Number of Cuisines": number_of_cuisines,
-                "City Encoded": city_freq_map.get(city, 0),
-                "Country Code Encoded": country_freq_map.get(country_code, 0),
+                "City": city,
+                "Country Code": country_code,
+                "Has Table booking": table_booking,
+                "Has Online delivery": online_delivery,
             }
         ]
-    )
+    )[FEATURE_COLS]
 
-    if st.button("Predict Rating", type="primary", use_container_width=True):
+    if st.button("Predict Rating", type="primary", width="stretch"):
         if not selected_cuisines:
             st.warning("Please select at least one cuisine before predicting.")
         else:
             selected_model = models[model_name]
             prediction = float(selected_model.predict(input_data)[0])
 
-            # Ratings in the source data are on a 0–5 scale.
+            # Ratings in the source data are on a 0-5 scale.
             prediction = max(0.0, min(5.0, prediction))
 
             st.markdown("---")
@@ -408,16 +309,17 @@ if page == "Prediction":
 
             st.progress(prediction / 5)
 
+            # Bands follow the "Rating text" column in the dataset.
             if prediction >= 4.5:
                 st.success("Excellent predicted rating")
             elif prediction >= 4.0:
                 st.success("Very good predicted rating")
-            elif prediction >= 3.0:
-                st.info("Average/good predicted rating")
-            elif prediction >= 2.0:
-                st.warning("Below-average predicted rating")
+            elif prediction >= 3.5:
+                st.info("Good predicted rating")
+            elif prediction >= 2.5:
+                st.warning("Average predicted rating")
             else:
-                st.error("Low predicted rating")
+                st.error("Poor predicted rating")
 
             st.subheader("Input features used by the model")
 
@@ -433,89 +335,106 @@ if page == "Prediction":
                         "Has Table booking": table_booking,
                         "Has Online delivery": online_delivery,
                         "Number of Cuisines": number_of_cuisines,
-                        "City Encoded": city_freq_map.get(city, 0),
-                        "Country Code Encoded": country_freq_map.get(country_code, 0),
+                        "Latitude (city median)": round(latitude, 4),
+                        "Longitude (city median)": round(longitude, 4),
                         "Model Used": model_name,
                         "Predicted Rating": round(prediction, 2),
                     }
                 ]
             )
 
-            st.table(full_row.T.rename(columns={0: "Value"}))
+            summary_table = full_row.astype(str).T.rename(columns={0: "Value"})
+            st.table(summary_table)
 
 elif page == "Model Comparison":
     st.header("Model Comparison")
 
     st.caption(
-        "Models, train/test split, metrics, and selection follow the notebook."
+        "The shared training utility uses a fixed 80/20 train-test split and "
+        "5-fold cross-validation on the training 80%. The model is selected by "
+        "lowest mean CV MAE; the held-out test set is used for final reporting. "
+        "Production pipelines in the artifact are refit on all rated rows."
     )
+
+    best_test = test_results[test_results["Model"] == best_model_name].iloc[0]
 
     metric_cols = st.columns(3)
+    metric_cols[0].metric("Best Model (CV)", best_model_name)
+    metric_cols[1].metric("Test MAE", f"{best_test['MAE']:.3f}")
+    metric_cols[2].metric("Test R²", f"{best_test['R2']:.3f}")
 
-    metric_cols[0].metric(
-        "Best Model",
-        best_model_name,
-    )
-    metric_cols[1].metric(
-        "Best R²",
-        f"{results_df.iloc[0]['R2']:.3f}",
-    )
-    metric_cols[2].metric(
-        "Best RMSE",
-        f"{results_df.iloc[0]['RMSE']:.3f}",
+    st.subheader("Cross-validation results (training set)")
+    cv_display = cv_results.copy()
+    for col in cv_display.columns[1:]:
+        cv_display[col] = cv_display[col].round(4)
+    st.dataframe(
+        cv_display.rename(columns={"R2 mean": "R² mean", "R2 std": "R² std"}),
+        width="stretch",
     )
 
-    display_results = results_df.copy()
+    st.subheader("Hold-out test results")
+    test_display = test_results.copy()
     for col in ["MAE", "RMSE", "R2"]:
-        display_results[col] = display_results[col].round(3)
-
-    st.dataframe(display_results, use_container_width=True)
+        test_display[col] = test_display[col].round(4)
+    st.dataframe(
+        test_display.rename(columns={"R2": "R²"}),
+        width="stretch",
+    )
 
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
 
-    for ax, metric in zip(axes, ["MAE", "RMSE", "R2"]):
-        ax.bar(results_df["Model"], results_df[metric])
-        ax.set_title(metric)
+    for ax, metric in zip(axes, ["MAE mean", "RMSE mean", "R2 mean"]):
+        ordered = cv_results.sort_values(metric, ascending=(metric != "R2 mean"))
+        ax.bar(ordered["Model"], ordered[metric])
+        ax.set_title(metric.replace("R2", "R²") + " (cross-validation)")
         ax.tick_params(axis="x", rotation=30)
 
     fig.suptitle(
-        "Model Comparison: Lower MAE/RMSE and Higher R² = Better"
+        "Model Comparison: lower MAE/RMSE and higher R² are better"
     )
     fig.tight_layout()
 
     st.pyplot(fig)
     plt.close(fig)
 
-    if hasattr(best_model, "feature_importances_"):
-        values = best_model.feature_importances_
-        title = f"{best_model_name} Feature Importance"
+    final_estimator = best_model.named_steps["model"]
+    encoded_names = best_model.named_steps["preprocessor"].get_feature_names_out()
+    # Drop the "num__" / "cat__" prefixes added by the ColumnTransformer.
+    encoded_names = [name.split("__", 1)[-1] for name in encoded_names]
+
+    if hasattr(final_estimator, "feature_importances_"):
+        values = final_estimator.feature_importances_
+        title = f"{best_model_name} Feature Importance (top 15)"
         xlabel = "Importance"
-    elif hasattr(best_model, "coef_"):
-        values = best_model.coef_
-        title = f"{best_model_name} Coefficients"
+    elif hasattr(final_estimator, "coef_"):
+        values = np.ravel(final_estimator.coef_)
+        title = f"{best_model_name} Coefficients (top 15)"
         xlabel = "Coefficient Value"
+        st.caption(
+            "Coefficients are not scaled, so their sizes cannot be compared across features."
+        )
     else:
         values = None
 
     if values is not None:
         feature_data = pd.DataFrame(
             {
-                "Feature": FEATURE_COLS,
+                "Feature": encoded_names,
                 "Value": values,
             }
         )
 
-        feature_data = feature_data.sort_values(
-            "Value",
-            key=abs,
-            ascending=True,
+        feature_data = (
+            feature_data.sort_values("Value", key=abs, ascending=False)
+            .head(15)
+            .iloc[::-1]
         )
 
-        fig, ax = plt.subplots(figsize=(9, 5))
+        fig, ax = plt.subplots(figsize=(9, 6))
         ax.barh(feature_data["Feature"], feature_data["Value"])
         ax.set_title(title)
         ax.set_xlabel(xlabel)
-        ax.set_ylabel("Features")
+        ax.set_ylabel("Features (categories are one-hot encoded)")
         fig.tight_layout()
 
         st.pyplot(fig)
@@ -531,11 +450,22 @@ elif page == "Dataset Overview":
     c3.metric("Columns", f"{len(raw_df.columns):,}")
     c4.metric(
         "Unrated Removed",
-        f"{(raw_df['Aggregate rating'] == 0).sum():,}",
+        f"{(raw_df[TARGET_COL] == 0).sum():,}",
+    )
+
+    rated_raw = raw_df[raw_df[TARGET_COL] > 0]
+    placeholder_coord_count = int(
+        ((rated_raw["Latitude"] == 0) | (rated_raw["Longitude"] == 0)).sum()
+    )
+    zero_cost_count = int((rated_raw["Average Cost for two"] == 0).sum())
+    st.caption(
+        f"Among the rated restaurants, {placeholder_coord_count} have placeholder "
+        f"coordinates (0) and {zero_cost_count} have an average cost of 0. These "
+        "are treated as missing values and filled before training."
     )
 
     st.subheader("Dataset Preview")
-    st.dataframe(raw_df.head(10), use_container_width=True)
+    st.dataframe(raw_df.head(10), width="stretch")
 
     st.subheader("Column Information")
 
@@ -549,24 +479,25 @@ elif page == "Dataset Overview":
         }
     )
 
-    st.dataframe(dtype_summary, use_container_width=True)
+    st.dataframe(dtype_summary, width="stretch")
 
-    st.subheader("Numerical Statistics")
+    st.subheader("Numerical Statistics (rated restaurants, after cleaning)")
 
     numerical_cols = [
         "Average Cost for two",
-        "Aggregate rating",
+        TARGET_COL,
         "Votes",
         "Price range",
     ]
 
     st.dataframe(
         df[numerical_cols].describe().round(2),
-        use_container_width=True,
+        width="stretch",
     )
 
     st.subheader("Feature Columns Used for Prediction")
-    st.write(FEATURE_COLS)
+    st.write("Numeric:", NUMERIC_FEATURES)
+    st.write("Categorical (one-hot encoded):", CATEGORICAL_FEATURES)
 
 else:
     st.header("Exploratory Data Analysis")
@@ -731,7 +662,7 @@ else:
 
         st.dataframe(
             cuisine_avg_rating.round(2).rename("Average Rating"),
-            use_container_width=True,
+            width="stretch",
         )
 
     with tab4:
@@ -753,7 +684,7 @@ else:
         st.pyplot(fig)
         plt.close(fig)
 
-        corr_features = FEATURE_COLS + ["Aggregate rating"]
+        corr_features = NUMERIC_FEATURES + [TARGET_COL]
         corr_matrix = df[corr_features].corr()
 
         fig, ax = plt.subplots(figsize=(10, 7))
@@ -766,7 +697,7 @@ else:
             ax=ax,
         )
         ax.set_title(
-            "Correlation Between Features and Aggregate Rating"
+            "Correlation Between Numeric Features and Aggregate Rating"
         )
         fig.tight_layout()
         st.pyplot(fig)
@@ -777,9 +708,9 @@ else:
         ].corr()
 
         st.subheader("Location Correlation")
-        st.dataframe(location_corr.round(3), use_container_width=True)
+        st.dataframe(location_corr.round(3), width="stretch")
 
 st.sidebar.divider()
 st.sidebar.caption(
-    "Restaurant Rating Predictor • Based on restaurant_predict.ipynb"
+    "Restaurant Rating Predictor"
 )
